@@ -36,6 +36,10 @@ const availabilityEl = document.getElementById("availability");
 const statusEl = document.getElementById("status");
 const errorEl = document.getElementById("error");
 const homeIdEl = document.getElementById("homeId");
+const scheduleEl = document.getElementById("schedule");
+const doorbellStatusEl = document.getElementById("doorbellStatus");
+const phoneModal = document.getElementById("phoneModal");
+const closeModalButton = document.getElementById("closeModal");
 
 const params = new URLSearchParams(window.location.search);
 const homeId = params.get("homeId");
@@ -49,8 +53,8 @@ if (!homeId) {
 
 let confirmationResult = null;
 let homeConfig = null;
-let isVerified = false;
 let pressCount = Number(localStorage.getItem("timbrPressCount") ?? "0");
+let isVerified = localStorage.getItem("timbrPhoneVerified") === "true";
 const sessionId = getSessionId();
 
 const recaptchaVerifier = new RecaptchaVerifier(
@@ -76,16 +80,27 @@ function updateAvailability() {
   if (!homeConfig) {
     availabilityEl.textContent = "No encontramos el hogar. Revisá el QR.";
     ringButton.disabled = true;
+    scheduleEl.textContent = "";
+    doorbellStatusEl.textContent = "";
     return;
   }
   const enabled = isDoorbellAvailable(homeConfig);
+  scheduleEl.textContent = buildScheduleText(homeConfig);
+  doorbellStatusEl.textContent = `Estado: ${
+    enabled ? "Habilitado" : "No habilitado"
+  }`;
   if (!enabled) {
     availabilityEl.textContent =
       "El timbre está deshabilitado en este horario. Intentá nuevamente mañana.";
     ringButton.disabled = true;
   } else {
-    availabilityEl.textContent = "Timbre habilitado.";
-    ringButton.disabled = pressCount > 0 && !isVerified;
+    if (pressCount > 0 && !isVerified) {
+      availabilityEl.textContent =
+        "Para tocar de nuevo, validá tu teléfono una única vez.";
+    } else {
+      availabilityEl.textContent = "Timbre habilitado.";
+    }
+    ringButton.disabled = false;
   }
 }
 
@@ -112,6 +127,30 @@ function isDoorbellAvailable(config) {
   return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
 }
 
+function buildScheduleText(config) {
+  const startMinutes = Number(config.scheduleStartMinutes ?? 480);
+  const endMinutes = Number(config.scheduleEndMinutes ?? 1200);
+  const startLabel = minutesToTime(startMinutes);
+  const endLabel = minutesToTime(endMinutes);
+  return `Horario habilitado: ${startLabel} a ${endLabel}`;
+}
+
+function minutesToTime(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function openPhoneModal() {
+  phoneModal.classList.remove("hidden");
+  phoneModal.setAttribute("aria-hidden", "false");
+}
+
+function closePhoneModal() {
+  phoneModal.classList.add("hidden");
+  phoneModal.setAttribute("aria-hidden", "true");
+}
+
 async function sendCode() {
   statusEl.textContent = "";
   errorEl.textContent = "";
@@ -128,7 +167,6 @@ async function sendCode() {
       recaptchaVerifier
     );
     statusEl.textContent = "Código enviado. Revisá tu SMS.";
-    isVerified = false;
     updateAvailability();
   } catch (error) {
     errorEl.textContent = error.message;
@@ -152,6 +190,8 @@ async function verifyCode() {
     await confirmationResult.confirm(code);
     statusEl.textContent = "Teléfono validado. Ya podés tocar timbre.";
     isVerified = true;
+    localStorage.setItem("timbrPhoneVerified", "true");
+    closePhoneModal();
     updateAvailability();
   } catch (error) {
     errorEl.textContent = error.message;
@@ -166,7 +206,8 @@ async function ringDoorbell() {
     return;
   }
   if (pressCount > 0 && !isVerified) {
-    errorEl.textContent = "Para volver a tocar, primero validá tu teléfono.";
+    errorEl.textContent = "";
+    openPhoneModal();
     return;
   }
   if (!homeConfig || !isDoorbellAvailable(homeConfig)) {
@@ -195,6 +236,10 @@ async function ringDoorbell() {
 sendCodeButton.addEventListener("click", sendCode);
 verifyCodeButton.addEventListener("click", verifyCode);
 ringButton.addEventListener("click", ringDoorbell);
+closeModalButton.addEventListener("click", closePhoneModal);
+phoneModal.addEventListener("click", (event) => {
+  if (event.target === phoneModal) closePhoneModal();
+});
 
 loadHomeConfig();
 
