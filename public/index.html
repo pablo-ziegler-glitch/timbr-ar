@@ -30,6 +30,11 @@
         border-radius: 16px;
         box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
       }
+      .card-title {
+        margin: 0 0 8px;
+        font-size: 16px;
+        color: #e2e8f0;
+      }
       label {
         font-size: 14px;
         color: #cbd5f5;
@@ -68,6 +73,51 @@
       .error {
         color: #f87171;
       }
+      .cta {
+        font-size: 18px;
+        font-weight: 600;
+        color: #ffffff;
+      }
+      .schedule {
+        font-size: 14px;
+        color: #cbd5f5;
+      }
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 17, 21, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        z-index: 10;
+      }
+      .modal.hidden {
+        display: none;
+      }
+      .modal-content {
+        width: min(100%, 420px);
+        background: #1c1f26;
+        padding: 24px;
+        border-radius: 18px;
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .modal-close {
+        background: transparent;
+        border: none;
+        color: #9aa4bf;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 4px;
+      }
     </style>
   </head>
   <body>
@@ -77,26 +127,19 @@
         <p class="muted">Validá tu teléfono y tocá el timbre virtual.</p>
       </header>
       <section class="card">
-        <div>
-          <label>Teléfono (solo si querés tocar de nuevo)</label>
-          <input id="phone" placeholder="+54 9 11 1234 5678" />
-        </div>
-        <div>
-          <label>Código SMS</label>
-          <input id="code" placeholder="123456" />
-        </div>
-        <button id="sendCode">Enviar código</button>
-        <button id="verifyCode">Validar teléfono</button>
+        <p class="card-title">Estado del timbre</p>
         <p id="availability" class="status"></p>
         <p id="status" class="status"></p>
         <p id="error" class="error"></p>
       </section>
       <section class="card">
         <p class="muted">Hogar asociado: <span id="homeId">-</span></p>
+        <p id="schedule" class="schedule"></p>
+        <p id="doorbellStatus" class="status"></p>
         <button id="ringButton" disabled>Tocar timbre virtual</button>
       </section>
       <section class="card">
-        <p class="muted">
+        <p class="cta">
           Si querés tener tu propio timbre virtual, contactame al 1130840181
         </p>
       </section>
@@ -104,6 +147,29 @@
         Si no recibís el SMS, revisá tu número o intentá nuevamente.
       </p>
     </main>
+    <div id="phoneModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-content" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <p class="card-title">Validá tu teléfono para tocar de nuevo</p>
+          <button id="closeModal" class="modal-close" aria-label="Cerrar">
+            ✕
+          </button>
+        </div>
+        <p class="muted">
+          Esta validación se hace una única vez por dispositivo.
+        </p>
+        <div>
+          <label>Teléfono</label>
+          <input id="phone" placeholder="+54 9 11 1234 5678" />
+        </div>
+        <button id="sendCode">Enviar código</button>
+        <div>
+          <label>Código SMS</label>
+          <input id="code" placeholder="123456" />
+        </div>
+        <button id="verifyCode">Confirmar teléfono</button>
+      </div>
+    </div>
     <div id="recaptcha-container"></div>
     <script type="module" src="./app.js"></script>
   </body>
