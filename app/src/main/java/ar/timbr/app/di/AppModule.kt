@@ -2,10 +2,15 @@ package ar.timbr.app.di
 
 import ar.timbr.app.data.repository.FirebaseAuthRepository
 import ar.timbr.app.data.repository.FirestoreDoorbellRepository
+import ar.timbr.app.data.repository.GooglePlacesRepository
 import ar.timbr.app.domain.repository.AuthRepository
 import ar.timbr.app.domain.repository.DoorbellRepository
+import ar.timbr.app.domain.repository.PlacesRepository
 import ar.timbr.app.domain.usecase.AuthUseCases
 import ar.timbr.app.domain.usecase.DoorbellUseCases
+import android.content.Context
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -13,6 +18,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Singleton
 
 @Module
@@ -32,6 +38,11 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun providePlacesClient(@ApplicationContext context: Context): PlacesClient =
+        Places.createClient(context)
+
+    @Provides
+    @Singleton
     fun provideAuthRepository(
         auth: FirebaseAuth,
         firestore: FirebaseFirestore,
@@ -42,6 +53,11 @@ object AppModule {
     fun provideDoorbellRepository(
         firestore: FirebaseFirestore,
     ): DoorbellRepository = FirestoreDoorbellRepository(firestore)
+
+    @Provides
+    @Singleton
+    fun providePlacesRepository(placesClient: PlacesClient): PlacesRepository =
+        GooglePlacesRepository(placesClient)
 
     @Provides
     @Singleton
