@@ -6,6 +6,7 @@ import ar.timbr.app.domain.model.LocationInput
 import ar.timbr.app.domain.model.LocationType
 import ar.timbr.app.domain.repository.PlacesRepository
 import ar.timbr.app.domain.usecase.AuthUseCases
+import com.google.android.gms.common.api.ApiException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,7 +69,7 @@ class AuthViewModel @Inject constructor(
                         it.copy(
                             addressSuggestions = emptyList(),
                             isAddressLoading = false,
-                            errorMessage = error.message ?: "No se pudo buscar la dirección.",
+                            errorMessage = mapPlacesError(error),
                         )
                     }
                 }
@@ -93,7 +94,7 @@ class AuthViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isAddressLoading = false,
-                            errorMessage = error.message ?: "No se pudo obtener la dirección.",
+                            errorMessage = mapPlacesError(error, defaultMessage = "No se pudo obtener la dirección."),
                         )
                     }
                 }
@@ -184,5 +185,18 @@ class AuthViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = error.message) }
         }
         _uiState.update { it.copy(isLoading = false) }
+    }
+
+    private fun mapPlacesError(
+        error: Throwable,
+        defaultMessage: String = "No se pudo buscar la dirección.",
+    ): String {
+        val apiException = error as? ApiException
+        return when (apiException?.statusCode) {
+            9011 -> "La API key de Google Maps/Places es inválida (9011). " +
+                "Configurá google_maps_key en strings.xml, habilitá Places API " +
+                "y verificá la facturación en Google Cloud."
+            else -> error.message ?: defaultMessage
+        }
     }
 }
