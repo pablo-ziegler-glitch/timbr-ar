@@ -1,5 +1,6 @@
 package ar.timbr.app.data.repository
 
+import ar.timbr.app.domain.model.LocationInput
 import ar.timbr.app.domain.repository.AuthRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.userProfileChangeRequest
@@ -9,7 +10,9 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.security.MessageDigest
 import java.time.ZoneId
+import java.util.UUID
 
 class FirebaseAuthRepository(
     private val auth: FirebaseAuth,
@@ -30,13 +33,20 @@ class FirebaseAuthRepository(
         auth.signInWithEmailAndPassword(email, password).await()
     }
 
-    override suspend fun signUp(fullName: String, email: String, password: String, homeId: String) {
+    override suspend fun signUp(
+        fullName: String,
+        email: String,
+        password: String,
+        locationInput: LocationInput,
+    ) {
         val result = auth.createUserWithEmailAndPassword(email, password).await()
         val user = result.user ?: error("No se pudo crear el usuario")
         user.updateProfile(userProfileChangeRequest {
             displayName = fullName
         }).await()
 
+        val homeId = UUID.randomUUID().toString()
+        val qrIdHash = hashSha256(homeId)
         val timeZone = ZoneId.systemDefault().id
         val homeRef = firestore.collection("homes").document(homeId)
         val userRef = firestore.collection("users").document(user.uid)
@@ -49,6 +59,13 @@ class FirebaseAuthRepository(
                     homeRef,
                     mapOf(
                         "homeId" to homeId,
+                        "publicQrId" to qrIdHash,
+                        "address" to locationInput.address,
+                        "addressName" to locationInput.addressName,
+                        "locationType" to locationInput.locationType.name,
+                        "placeId" to locationInput.placeId,
+                        "latitude" to locationInput.latitude,
+                        "longitude" to locationInput.longitude,
                         "isDoorbellEnabled" to true,
                         "scheduleStartMinutes" to 480,
                         "scheduleEndMinutes" to 1200,
@@ -76,5 +93,10 @@ class FirebaseAuthRepository(
 
     override suspend fun signOut() {
         auth.signOut()
+    }
+
+    private fun hashSha256(value: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
+        return bytes.joinToString(separator = "") { byte -> "%02x".format(byte) }
     }
 }

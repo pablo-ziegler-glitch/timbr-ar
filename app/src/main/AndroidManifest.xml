@@ -10,6 +10,9 @@
         android:roundIcon="@android:drawable/sym_def_app_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.Timbr">
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_maps_key" />
         <service
             android:name="ar.timbr.app.TimbrMessagingService"
             android:exported="false">
