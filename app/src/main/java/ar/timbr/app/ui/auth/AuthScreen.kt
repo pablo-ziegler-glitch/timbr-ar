@@ -25,9 +25,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import ar.timbr.app.domain.model.LocationType
+import ar.timbr.app.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
@@ -44,7 +46,7 @@ fun AuthScreen(viewModel: AuthViewModel = hiltViewModel()) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text = "Timbr", style = MaterialTheme.typography.headlineMedium)
+        Text(text = stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(
             value = state.email,
             onValueChange = viewModel::updateEmail,

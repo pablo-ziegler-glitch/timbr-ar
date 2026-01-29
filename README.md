@@ -1,4 +1,4 @@
-# Timbr AR
+# TimbrAR
 
 Solución completa para timbre virtual con app Android (residentes) y web pública (visitas) usando Firebase.
 

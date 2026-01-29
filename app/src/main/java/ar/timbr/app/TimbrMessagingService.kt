@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import ar.timbr.app.R
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
@@ -22,7 +23,7 @@ class TimbrMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val title = message.notification?.title ?: "Timbr"
+        val title = message.notification?.title ?: getString(R.string.app_name)
         val body = message.notification?.body ?: "Alguien está en la puerta"
         showNotification(title, body)
     }

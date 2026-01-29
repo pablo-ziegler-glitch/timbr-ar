@@ -1,3 +1,4 @@
 <resources>
+    <string name="app_name">TimbrAR</string>
     <string name="google_maps_key">REPLACE_WITH_GOOGLE_MAPS_API_KEY</string>
 </resources>
