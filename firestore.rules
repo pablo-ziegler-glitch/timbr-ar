@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /homes/{homeId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && !exists(/databases/$(database)/documents/homes/$(homeId))
+        && request.resource.data.keys().hasOnly([
+          "homeId",
+          "isDoorbellEnabled",
+          "scheduleStartMinutes",
+          "scheduleEndMinutes",
+          "timeZone",
+          "rateLimitBaseMinutes",
+          "rateLimitMaxMinutes",
+          "createdAt"
+        ])
+        && request.resource.data.homeId == homeId;
+      allow update: if request.auth != null && isOwner(homeId);
+    }
+
+    match /homes/{homeId}/ringEvents/{eventId} {
+      allow read: if request.auth != null && isHomeMember(homeId);
+    }
+
+    match /homes/{homeId}/blockedPhones/{phoneId} {
+      allow read, create, update, delete: if request.auth != null && isOwner(homeId);
+    }
+  }
+
+  function isHomeMember(homeId) {
+    return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.homeId == homeId;
+  }
+
+  function isOwner(homeId) {
+    return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.homeId == homeId
+      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "owner";
+  }
+}

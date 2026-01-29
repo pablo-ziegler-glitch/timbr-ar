@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Timbr | Avisar en la puerta</title>
+    <meta
+      name="description"
+      content="Avisá que estás en la puerta de forma segura y rápida."
+    />
+    <link rel="preconnect" href="https://www.gstatic.com" />
+    <style>
+      body {
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        margin: 0;
+        background: #0f1115;
+        color: #ffffff;
+      }
+      .container {
+        max-width: 420px;
+        margin: 0 auto;
+        padding: 32px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .card {
+        background: #1c1f26;
+        padding: 20px;
+        border-radius: 16px;
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+      }
+      label {
+        font-size: 14px;
+        color: #cbd5f5;
+      }
+      input {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid #2f3644;
+        background: #12141a;
+        color: white;
+        margin-top: 6px;
+      }
+      button {
+        width: 100%;
+        padding: 14px;
+        border-radius: 12px;
+        border: none;
+        background: #5c7cfa;
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .muted {
+        color: #9aa4bf;
+        font-size: 13px;
+      }
+      .status {
+        font-size: 14px;
+        color: #9ae6b4;
+      }
+      .error {
+        color: #f87171;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Timbr</h1>
+        <p class="muted">Validá tu teléfono y tocá el timbre virtual.</p>
+      </header>
+      <section class="card">
+        <div>
+          <label>Teléfono (solo si querés tocar de nuevo)</label>
+          <input id="phone" placeholder="+54 9 11 1234 5678" />
+        </div>
+        <div>
+          <label>Código SMS</label>
+          <input id="code" placeholder="123456" />
+        </div>
+        <button id="sendCode">Enviar código</button>
+        <button id="verifyCode">Validar teléfono</button>
+        <p id="availability" class="status"></p>
+        <p id="status" class="status"></p>
+        <p id="error" class="error"></p>
+      </section>
+      <section class="card">
+        <p class="muted">Hogar asociado: <span id="homeId">-</span></p>
+        <button id="ringButton" disabled>Tocar timbre virtual</button>
+      </section>
+      <section class="card">
+        <p class="muted">
+          Si querés tener tu propio timbre virtual, contactame al 1130840181
+        </p>
+      </section>
+      <p class="muted">
+        Si no recibís el SMS, revisá tu número o intentá nuevamente.
+      </p>
+    </main>
+    <div id="recaptcha-container"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
