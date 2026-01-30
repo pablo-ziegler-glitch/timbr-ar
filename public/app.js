@@ -6,8 +6,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   getFirestore,
+  collection,
   doc,
   getDoc,
+  getDocs,
+  limit,
+  query,
+  where,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import {
   getFunctions,
@@ -42,13 +47,15 @@ const phoneModal = document.getElementById("phoneModal");
 const closeModalButton = document.getElementById("closeModal");
 
 const params = new URLSearchParams(window.location.search);
-const homeId = params.get("homeId");
+const homeIdParam = params.get("homeId");
+const publicQrId = params.get("qr");
+let resolvedHomeId = homeIdParam;
 
-homeIdEl.textContent = homeId ?? "No definido";
+homeIdEl.textContent = resolvedHomeId ?? "No definido";
 
-if (!homeId) {
+if (!homeIdParam && !publicQrId) {
   ringButton.disabled = true;
-  statusEl.textContent = "El QR no tiene un homeId válido.";
+  statusEl.textContent = "El QR no tiene un identificador válido.";
 }
 
 let confirmationResult = null;
@@ -66,6 +73,7 @@ const recaptchaVerifier = new RecaptchaVerifier(
 );
 
 async function loadHomeConfig() {
+  const homeId = await resolveHomeId();
   if (!homeId) return;
   try {
     const homeSnapshot = await getDoc(doc(db, "homes", homeId));
@@ -201,6 +209,7 @@ async function verifyCode() {
 async function ringDoorbell() {
   statusEl.textContent = "";
   errorEl.textContent = "";
+  const homeId = await resolveHomeId();
   if (!homeId) {
     errorEl.textContent = "No se encontró el hogar en el QR.";
     return;
@@ -230,6 +239,30 @@ async function ringDoorbell() {
     updateAvailability();
   } catch (error) {
     errorEl.textContent = error.message ?? "No se pudo enviar el timbre.";
+  }
+}
+
+async function resolveHomeId() {
+  if (resolvedHomeId) return resolvedHomeId;
+  if (!publicQrId) return null;
+  try {
+    const homesQuery = query(
+      collection(db, "homes"),
+      where("publicQrId", "==", publicQrId),
+      limit(1)
+    );
+    const snapshot = await getDocs(homesQuery);
+    const match = snapshot.docs[0];
+    resolvedHomeId = match?.id ?? null;
+    homeIdEl.textContent = resolvedHomeId ?? "No definido";
+    if (!resolvedHomeId) {
+      ringButton.disabled = true;
+      statusEl.textContent = "No encontramos el hogar para este QR.";
+    }
+    return resolvedHomeId;
+  } catch (error) {
+    errorEl.textContent = error.message ?? "No se pudo validar el QR.";
+    return null;
   }
 }
 

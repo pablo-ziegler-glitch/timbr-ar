@@ -70,4 +70,5 @@ dependencies {
 
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     implementation("com.google.android.libraries.places:places:3.5.0")
+    implementation("com.google.zxing:core:3.5.3")
 }

@@ -1,6 +1,12 @@
 package ar.timbr.app.ui.home
 
+import android.content.Intent
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -13,23 +19,65 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.content.FileProvider
+import ar.timbr.app.R
+import ar.timbr.app.domain.model.LocationType
+import android.content.Context
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.io.File
+import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val formatter = DateTimeFormatter.ofPattern("dd/MM HH:mm")
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val homeConfig = state.homeConfig
+    val qrBaseUrl = stringResource(R.string.public_qr_base_url)
+    val qrValue = remember(homeConfig?.publicQrId, qrBaseUrl) {
+        homeConfig?.publicQrId?.takeIf { it.isNotBlank() }?.let { "$qrBaseUrl/?qr=$it" }
+    }
+    val qrBitmap = remember(qrValue) { qrValue?.let { generateQrBitmap(it) } }
+    val locationTypeExpanded = remember { mutableStateOf(false) }
+    val downloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("image/png"),
+    ) { uri ->
+        if (uri != null && qrBitmap != null) {
+            scope.launch(Dispatchers.IO) {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                }
+            }
+        }
+    }
+    val canConfigureHome = state.profile?.role == "owner" || state.profile?.homeId.isNullOrBlank()
 
     Column(
         modifier = Modifier
@@ -43,11 +91,167 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
             CircularProgressIndicator()
         } else {
             Text(text = "Hogar: ${state.profile?.homeId ?: "Sin asignar"}")
-            Text(text = "Usuario: ${state.profile?.fullName ?: ""}")
+            val fullName = state.profile?.fullName.orEmpty()
+            val email = state.profile?.email.orEmpty()
+            Text(text = "Usuario: ${if (fullName.isNotBlank()) fullName else email}")
+            if (email.isNotBlank()) {
+                Text(text = "Email: $email")
+            }
+            if (state.profile?.role == "owner") {
+                Text(text = "Rol: Propietario")
+            } else if (state.profile != null) {
+                Text(text = "Rol: Miembro")
+            }
         }
 
         Button(onClick = viewModel::signOut, modifier = Modifier.fillMaxWidth()) {
             Text("Cerrar sesión")
+        }
+
+        if (homeConfig != null) {
+            Text(text = "Ubicación", style = MaterialTheme.typography.titleMedium)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(text = "Nombre: ${homeConfig.addressName.ifBlank { "Sin nombre" }}")
+                    Text(text = "Dirección: ${homeConfig.address.ifBlank { "Sin definir" }}")
+                    Text(text = "Tipo: ${homeConfig.locationType.displayName}")
+                }
+            }
+        }
+
+        if (qrValue != null && qrBitmap != null) {
+            Text(text = "QR para visitantes", style = MaterialTheme.typography.titleMedium)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "Código QR del hogar",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = "Link: $qrValue",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Button(
+                        onClick = { downloadLauncher.launch("timbr-qr.png") },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Descargar QR (PNG)")
+                    }
+                    TextButton(
+                        onClick = {
+                            shareQrBitmap(context, qrBitmap)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Compartir / Imprimir QR")
+                    }
+                }
+            }
+        }
+
+        if (canConfigureHome) {
+            Text(text = "Configurar hogar", style = MaterialTheme.typography.titleMedium)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = state.homeSetupDraft.addressQuery,
+                            onValueChange = viewModel::updateHomeAddressQuery,
+                            label = { Text("Ubicación (dirección)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                if (state.homeSetupDraft.isAddressLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.height(20.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
+                            },
+                        )
+                        DropdownMenu(
+                            expanded = state.homeSetupDraft.addressSuggestions.isNotEmpty(),
+                            onDismissRequest = viewModel::clearHomeAddressSuggestions,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            state.homeSetupDraft.addressSuggestions.forEach { suggestion ->
+                                DropdownMenuItem(
+                                    text = { Text(text = suggestion.fullText) },
+                                    onClick = { viewModel.selectHomeAddress(suggestion.placeId) },
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = state.homeSetupDraft.addressName,
+                        onValueChange = viewModel::updateHomeAddressName,
+                        label = { Text("Nombre de la ubicación") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    ExposedDropdownMenuBox(
+                        expanded = locationTypeExpanded.value,
+                        onExpandedChange = { locationTypeExpanded.value = !locationTypeExpanded.value },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        OutlinedTextField(
+                            value = state.homeSetupDraft.locationType.displayName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Tipo de ubicación") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = locationTypeExpanded.value)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                        )
+                        DropdownMenu(
+                            expanded = locationTypeExpanded.value,
+                            onDismissRequest = { locationTypeExpanded.value = false },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            LocationType.values().forEach { type ->
+                                DropdownMenuItem(
+                                    text = { Text(type.displayName) },
+                                    onClick = {
+                                        viewModel.updateHomeLocationType(type)
+                                        locationTypeExpanded.value = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (state.homeSetupDraft.errorMessage != null) {
+                        Text(
+                            text = state.homeSetupDraft.errorMessage.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (state.homeSetupDraft.successMessage != null) {
+                        Text(text = state.homeSetupDraft.successMessage.orEmpty())
+                    }
+                    Button(
+                        onClick = viewModel::saveHomeLocation,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !state.homeSetupDraft.isSaving,
+                    ) {
+                        Text(if (state.homeSetupDraft.isSaving) "Guardando..." else "Guardar ubicación")
+                    }
+                    Text(
+                        text = "El QR se genera con un ID hasheado para proteger la ubicación.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
 
         if (state.profile?.role == "owner") {
@@ -167,4 +371,22 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
             }
         }
     }
+}
+
+private fun shareQrBitmap(context: Context, bitmap: Bitmap) {
+    val cacheFile = File(context.cacheDir, "timbr-qr.png")
+    FileOutputStream(cacheFile).use { output ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+    }
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        cacheFile,
+    )
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/png"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "Compartir QR"))
 }

@@ -34,6 +34,13 @@ users/{uid}
 
 homes/{homeId}
   - homeId
+  - publicQrId (hash del homeId)
+  - address
+  - addressName
+  - locationType
+  - placeId
+  - latitude
+  - longitude
   - isDoorbellEnabled
   - scheduleStartMinutes (0-1439)
   - scheduleEndMinutes (0-1439)
@@ -76,7 +83,7 @@ homes/{homeId}/rateLimits/{identifier}
 - **HomeScreen (Owner)**: bloqueo manual de números no deseados.
 
 ## 🌐 Web pública (QR)
-- URL del QR: `https://<tu-proyecto>.web.app/?homeId=HOGAR-123`.
+- URL del QR: `https://<tu-proyecto>.web.app/?qr=HASH_PUBLICO`.
 - El visitante:
   1. Ingresa teléfono
   2. Recibe SMS
