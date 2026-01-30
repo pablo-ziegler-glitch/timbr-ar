@@ -12,6 +12,13 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/homes/$(homeId))
         && request.resource.data.keys().hasOnly([
           "homeId",
+          "publicQrId",
+          "address",
+          "addressName",
+          "locationType",
+          "placeId",
+          "latitude",
+          "longitude",
           "isDoorbellEnabled",
           "scheduleStartMinutes",
           "scheduleEndMinutes",
