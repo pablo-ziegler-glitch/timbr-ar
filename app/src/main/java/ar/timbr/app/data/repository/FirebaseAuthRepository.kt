@@ -3,6 +3,8 @@ package ar.timbr.app.data.repository
 import ar.timbr.app.domain.model.LocationInput
 import ar.timbr.app.domain.repository.AuthRepository
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.userProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -31,6 +33,22 @@ class FirebaseAuthRepository(
 
     override suspend fun signIn(email: String, password: String) {
         auth.signInWithEmailAndPassword(email, password).await()
+    }
+
+    override suspend fun signUpPublic(fullName: String, email: String, password: String) {
+        val result = auth.createUserWithEmailAndPassword(email, password).await()
+        val user = result.user ?: error("No se pudo crear el usuario")
+        user.updateProfile(userProfileChangeRequest {
+            displayName = fullName
+        }).await()
+        ensurePublicProfile(user, fullName)
+    }
+
+    override suspend fun signInWithGoogle(idToken: String) {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        val result = auth.signInWithCredential(credential).await()
+        val user = result.user ?: error("No se pudo autenticar con Google")
+        ensurePublicProfile(user)
     }
 
     override suspend fun signUp(
@@ -93,6 +111,40 @@ class FirebaseAuthRepository(
 
     override suspend fun signOut() {
         auth.signOut()
+    }
+
+    private suspend fun ensurePublicProfile(user: FirebaseUser, fullName: String? = null) {
+        val userRef = firestore.collection("users").document(user.uid)
+        firestore.runTransaction { transaction ->
+            val snapshot = transaction.get(userRef)
+            if (!snapshot.exists()) {
+                transaction.set(
+                    userRef,
+                    mapOf(
+                        "uid" to user.uid,
+                        "fullName" to (fullName ?: user.displayName.orEmpty()),
+                        "email" to user.email.orEmpty(),
+                        "role" to "public",
+                        "createdAt" to FieldValue.serverTimestamp(),
+                    )
+                )
+            } else {
+                val updates = buildMap<String, Any> {
+                    if (snapshot.getString("fullName").isNullOrBlank() && !fullName.isNullOrBlank()) {
+                        put("fullName", fullName)
+                    }
+                    if (snapshot.getString("email").isNullOrBlank() && !user.email.isNullOrBlank()) {
+                        put("email", user.email!!)
+                    }
+                    if (snapshot.getString("role").isNullOrBlank()) {
+                        put("role", "public")
+                    }
+                }
+                if (updates.isNotEmpty()) {
+                    transaction.update(userRef, updates)
+                }
+            }
+        }.await()
     }
 
     private fun hashSha256(value: String): String {
