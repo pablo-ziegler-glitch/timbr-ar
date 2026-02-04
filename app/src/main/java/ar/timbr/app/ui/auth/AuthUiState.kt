@@ -6,6 +6,7 @@ import ar.timbr.app.domain.model.LocationType
 
 data class AuthUiState(
     val mode: AuthMode = AuthMode.SignIn,
+    val role: AuthRole = AuthRole.Owner,
     val email: String = "",
     val password: String = "",
     val fullName: String = "",
@@ -15,6 +16,7 @@ data class AuthUiState(
     val addressName: String = "",
     val locationType: LocationType = LocationType.CASA,
     val isLoading: Boolean = false,
+    val isGoogleLoading: Boolean = false,
     val isAddressLoading: Boolean = false,
     val errorMessage: String? = null,
 )
@@ -22,4 +24,9 @@ data class AuthUiState(
 enum class AuthMode {
     SignIn,
     SignUp,
+}
+
+enum class AuthRole(val label: String) {
+    Owner("Casa o tienda"),
+    Public("Usuario público"),
 }

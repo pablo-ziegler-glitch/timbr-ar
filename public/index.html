@@ -78,6 +78,25 @@
         font-weight: 600;
         color: #ffffff;
       }
+      .download-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 12px 16px;
+        border-radius: 12px;
+        border: 1px solid #2f3644;
+        background: #12141a;
+        color: #e2e8f0;
+        text-decoration: none;
+        font-size: 15px;
+      }
+      .download-button:hover {
+        border-color: #5c7cfa;
+      }
+      .download-button.hidden {
+        display: none;
+      }
       .schedule {
         font-size: 14px;
         color: #cbd5f5;
@@ -124,7 +143,10 @@
     <main class="container">
       <header>
         <h1>TimbrAR</h1>
-        <p class="muted">Validá tu teléfono y tocá el timbre virtual.</p>
+        <p class="muted">
+          Confirmá tu ubicación a menos de 100 metros para tocar el timbre
+          virtual.
+        </p>
       </header>
       <section class="card">
         <p class="card-title">Estado del timbre</p>
@@ -137,40 +159,45 @@
         <p id="schedule" class="schedule"></p>
         <p id="doorbellStatus" class="status"></p>
         <button id="ringButton" disabled>Tocar timbre virtual</button>
+        <a
+          id="downloadApp"
+          class="download-button hidden"
+          href="https://play.google.com/store/apps/details?id=ar.timbr.app"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Descargar app en Google Play
+        </a>
       </section>
       <section class="card">
         <p class="cta">
-          Si querés tener tu propio timbre virtual, contactame al 1130840181
+          Tene tu timbre virtual GRATIS contactando al 1130840181 via whatsApps
         </p>
       </section>
-      <p class="muted">
-        Si no recibís el SMS, revisá tu número o intentá nuevamente.
-      </p>
     </main>
-    <div id="phoneModal" class="modal hidden" aria-hidden="true">
+    <div id="emailModal" class="modal hidden" aria-hidden="true">
       <div class="modal-content" role="dialog" aria-modal="true">
         <div class="modal-header">
-          <p class="card-title">Validá tu teléfono para tocar de nuevo</p>
+          <p class="card-title">Verificá tu email para tocar de nuevo</p>
           <button id="closeModal" class="modal-close" aria-label="Cerrar">
             ✕
           </button>
         </div>
         <p class="muted">
-          Esta validación se hace una única vez por dispositivo.
+          Esta verificación se hace una única vez por email.
         </p>
         <div>
-          <label>Teléfono</label>
-          <input id="phone" placeholder="+54 9 11 1234 5678" />
+          <label>Email</label>
+          <input id="email" type="email" placeholder="tu@email.com" />
         </div>
-        <button id="sendCode">Enviar código</button>
         <div>
-          <label>Código SMS</label>
-          <input id="code" placeholder="123456" />
+          <label>Contraseña</label>
+          <input id="password" type="password" placeholder="Mínimo 6 caracteres" />
         </div>
-        <button id="verifyCode">Confirmar teléfono</button>
+        <button id="sendVerification">Enviar verificación</button>
+        <button id="refreshVerification">Ya verifiqué mi email</button>
       </div>
     </div>
-    <div id="recaptcha-container"></div>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

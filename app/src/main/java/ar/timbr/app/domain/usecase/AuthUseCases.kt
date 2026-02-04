@@ -8,6 +8,9 @@ class AuthUseCases(private val repository: AuthRepository) {
     val currentUserId = repository::currentUserId
 
     suspend fun signIn(email: String, password: String) = repository.signIn(email, password)
+    suspend fun signUpPublic(fullName: String, email: String, password: String) =
+        repository.signUpPublic(fullName, email, password)
+    suspend fun signInWithGoogle(idToken: String) = repository.signInWithGoogle(idToken)
     suspend fun signUp(fullName: String, email: String, password: String, locationInput: LocationInput) =
         repository.signUp(fullName, email, password, locationInput)
 

@@ -31,6 +31,24 @@ class AuthViewModel @Inject constructor(
         _uiState.update { it.copy(email = value) }
     }
 
+    fun updateRole(value: AuthRole) {
+        _uiState.update {
+            val resetAddress = if (value == AuthRole.Public) {
+                it.copy(
+                    addressQuery = "",
+                    selectedAddress = null,
+                    addressName = "",
+                    locationType = LocationType.CASA,
+                    addressSuggestions = emptyList(),
+                    isAddressLoading = false,
+                )
+            } else {
+                it
+            }
+            resetAddress.copy(role = value, errorMessage = null)
+        }
+    }
+
     fun updatePassword(value: String) {
         _uiState.update { it.copy(password = value) }
     }
@@ -147,6 +165,16 @@ class AuthViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = false) }
     }
 
+    fun signInWithGoogle(idToken: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isGoogleLoading = true, errorMessage = null) }
+        runCatching {
+            authUseCases.signInWithGoogle(idToken)
+        }.onFailure { error ->
+            _uiState.update { it.copy(errorMessage = error.message) }
+        }
+        _uiState.update { it.copy(isGoogleLoading = false) }
+    }
+
     fun signUp() = viewModelScope.launch {
         val state = uiState.value
         if (state.email.isBlank() || state.password.isBlank()) {
@@ -155,6 +183,20 @@ class AuthViewModel @Inject constructor(
         }
         if (state.fullName.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Ingresá tu nombre completo.") }
+            return@launch
+        }
+        if (state.role == AuthRole.Public) {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            runCatching {
+                authUseCases.signUpPublic(
+                    fullName = state.fullName.trim(),
+                    email = state.email.trim(),
+                    password = state.password,
+                )
+            }.onFailure { error ->
+                _uiState.update { it.copy(errorMessage = error.message) }
+            }
+            _uiState.update { it.copy(isLoading = false) }
             return@launch
         }
         val selectedAddress = state.selectedAddress
