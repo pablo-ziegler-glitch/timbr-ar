@@ -2,202 +2,114 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TimbrAR | Avisar en la puerta</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>TimbrAR | Timbre virtual para visitas</title>
     <meta
       name="description"
-      content="Avisá que estás en la puerta de forma segura y rápida."
+      content="Escaneá QR y avisá que estás en la puerta en segundos con TimbrAR."
     />
+    <meta name="theme-color" content="#0f1115" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TimbrAR" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/icon.svg" />
     <link rel="preconnect" href="https://www.gstatic.com" />
     <style>
-      body {
-        font-family: "Inter", system-ui, -apple-system, sans-serif;
-        margin: 0;
-        background: #0f1115;
-        color: #ffffff;
+      :root {
+        color-scheme: dark;
+        font-family: Inter, system-ui, -apple-system, sans-serif;
       }
-      .container {
-        max-width: 420px;
-        margin: 0 auto;
-        padding: 32px 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-      .card {
-        background: #1c1f26;
-        padding: 20px;
-        border-radius: 16px;
-        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
-      }
-      .card-title {
-        margin: 0 0 8px;
-        font-size: 16px;
-        color: #e2e8f0;
-      }
-      label {
-        font-size: 14px;
-        color: #cbd5f5;
-      }
-      input {
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #0f1115; color: #fff; }
+      .container { max-width: 420px; margin: 0 auto; padding: 24px 16px 96px; display: flex; flex-direction: column; gap: 14px; }
+      .card { background: #1c1f26; padding: 16px; border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
+      h1 { margin: 0 0 8px; font-size: 28px; }
+      .card-title { margin: 0 0 8px; font-size: 16px; color: #e2e8f0; }
+      .muted { color: #9aa4bf; font-size: 13px; margin: 0; }
+      .status { font-size: 14px; color: #9ae6b4; margin: 0; }
+      .error { color: #f87171; font-size: 14px; margin: 0; }
+      .schedule { color: #cbd5f5; font-size: 14px; margin: 0; }
+      button, .secondary-link {
         width: 100%;
+        border: none;
+        border-radius: 12px;
         padding: 12px 14px;
-        border-radius: 10px;
-        border: 1px solid #2f3644;
-        background: #12141a;
-        color: white;
-        margin-top: 6px;
-      }
-      button {
-        width: 100%;
-        padding: 14px;
-        border-radius: 12px;
-        border: none;
-        background: #5c7cfa;
-        color: white;
-        font-size: 16px;
-        cursor: pointer;
-      }
-      button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      .muted {
-        color: #9aa4bf;
-        font-size: 13px;
-      }
-      .status {
-        font-size: 14px;
-        color: #9ae6b4;
-      }
-      .error {
-        color: #f87171;
-      }
-      .cta {
-        font-size: 18px;
-        font-weight: 600;
-        color: #ffffff;
-      }
-      .download-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        padding: 12px 16px;
-        border-radius: 12px;
-        border: 1px solid #2f3644;
-        background: #12141a;
-        color: #e2e8f0;
-        text-decoration: none;
         font-size: 15px;
-      }
-      .download-button:hover {
-        border-color: #5c7cfa;
-      }
-      .download-button.hidden {
-        display: none;
-      }
-      .schedule {
-        font-size: 14px;
-        color: #cbd5f5;
-      }
-      .modal {
-        position: fixed;
-        inset: 0;
-        background: rgba(15, 17, 21, 0.72);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        z-index: 10;
-      }
-      .modal.hidden {
-        display: none;
-      }
-      .modal-content {
-        width: min(100%, 420px);
-        background: #1c1f26;
-        padding: 24px;
-        border-radius: 18px;
-        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-      .modal-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .modal-close {
-        background: transparent;
-        border: none;
-        color: #9aa4bf;
-        font-size: 20px;
         cursor: pointer;
-        padding: 4px;
       }
+      .primary { background: #5c7cfa; color: #fff; }
+      .secondary { background: #12141a; color: #e2e8f0; border: 1px solid #2f3644; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      .secondary-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+      input {
+        width: 100%; padding: 12px; border-radius: 10px;
+        border: 1px solid #2f3644; background: #12141a; color: #fff;
+      }
+      .hidden { display: none !important; }
+      .stack { display: flex; flex-direction: column; gap: 10px; }
+      .modal {
+        position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 20;
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+      }
+      .modal-content { width: min(100%, 420px); background: #1c1f26; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      .modal-header { display: flex; justify-content: space-between; align-items: center; }
+      .modal-close { background: transparent; color: #cbd5f5; border: none; font-size: 20px; }
+      #scannerVideo { width: 100%; border-radius: 12px; background: #000; aspect-ratio: 3/4; object-fit: cover; }
+      .pill { border-radius: 999px; background: #12141a; border: 1px solid #2f3644; padding: 8px 10px; font-size: 12px; color: #cbd5f5; }
     </style>
   </head>
   <body>
     <main class="container">
       <header>
         <h1>TimbrAR</h1>
-        <p class="muted">
-          Confirmá tu ubicación a menos de 100 metros para tocar el timbre
-          virtual.
-        </p>
+        <p class="muted">Escaneá el QR y tocá timbre virtual en segundos.</p>
       </header>
-      <section class="card">
-        <p class="card-title">Estado del timbre</p>
-        <p id="availability" class="status"></p>
-        <p id="status" class="status"></p>
-        <p id="error" class="error"></p>
+
+      <section class="card stack">
+        <button id="scanQrButton" class="secondary" type="button">Escanear QR</button>
+        <p id="scanStatus" class="muted">También podés abrir el link del QR directamente.</p>
+        <div id="nativeScannerUnsupported" class="pill hidden">
+          Tu navegador no soporta escaneo QR nativo. Usá el link del QR o pegá el código manualmente.
+        </div>
+        <label for="manualQrInput" class="muted">Código manual (URL, qr/homeId o token)</label>
+        <div style="display:flex; gap:8px;">
+          <input id="manualQrInput" type="text" placeholder="Ej: https://.../?qr=abc123" />
+          <button id="applyManualQrButton" class="secondary" type="button" style="width:auto;">Aplicar</button>
+        </div>
       </section>
-      <section class="card">
+
+      <section class="card stack">
+        <p class="card-title">Estado del timbre</p>
         <p class="muted">Hogar asociado: <span id="homeId">-</span></p>
         <p id="schedule" class="schedule"></p>
         <p id="doorbellStatus" class="status"></p>
-        <button id="ringButton" disabled>Tocar timbre virtual</button>
+        <p id="availability" class="status"></p>
+        <p id="status" class="status"></p>
+        <p id="error" class="error"></p>
+        <button id="ringButton" class="primary" type="button" disabled>Tocar timbre virtual</button>
         <a
           id="downloadApp"
-          class="download-button hidden"
+          class="secondary-link secondary hidden"
           href="https://play.google.com/store/apps/details?id=ar.timbr.app"
           target="_blank"
           rel="noreferrer"
-        >
-          Descargar app en Google Play
-        </a>
-      </section>
-      <section class="card">
-        <p class="cta">
-          Tene tu timbre virtual GRATIS contactando al 1130840181 via whatsApps
-        </p>
+        >Descargar app Android (residentes)</a>
       </section>
     </main>
-    <div id="emailModal" class="modal hidden" aria-hidden="true">
-      <div class="modal-content" role="dialog" aria-modal="true">
+
+    <div id="scannerModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-content">
         <div class="modal-header">
-          <p class="card-title">Verificá tu email para tocar de nuevo</p>
-          <button id="closeModal" class="modal-close" aria-label="Cerrar">
-            ✕
-          </button>
+          <p class="card-title">Escanear QR</p>
+          <button id="closeScannerModal" class="modal-close" type="button" aria-label="Cerrar">✕</button>
         </div>
-        <p class="muted">
-          Esta verificación se hace una única vez por email.
-        </p>
-        <div>
-          <label>Email</label>
-          <input id="email" type="email" placeholder="tu@email.com" />
-        </div>
-        <div>
-          <label>Contraseña</label>
-          <input id="password" type="password" placeholder="Mínimo 6 caracteres" />
-        </div>
-        <button id="sendVerification">Enviar verificación</button>
-        <button id="refreshVerification">Ya verifiqué mi email</button>
+        <video id="scannerVideo" muted playsinline></video>
+        <p id="scannerFeedback" class="muted">Apuntá la cámara al QR.</p>
+        <button id="stopScannerButton" class="secondary" type="button">Cerrar cámara</button>
       </div>
     </div>
+
     <script type="module" src="./app.js"></script>
   </body>
 </html>

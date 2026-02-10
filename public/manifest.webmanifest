@@ -1,0 +1,29 @@
+{
+  "id": "/",
+  "name": "TimbrAR Visitas",
+  "short_name": "TimbrAR",
+  "description": "PWA para visitantes: escaneo QR, validación de ubicación y timbre virtual.",
+  "lang": "es-AR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0f1115",
+  "background_color": "#0f1115",
+  "categories": ["utilities", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
