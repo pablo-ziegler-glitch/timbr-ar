@@ -1,16 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
-  signInWithEmailAndPassword,
-} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-import {
-  getFirestore,
   collection,
   doc,
   getDoc,
   getDocs,
+  getFirestore,
   limit,
   query,
   where,
@@ -28,108 +23,248 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app, "southamerica-east1");
 const requestDoorbell = httpsCallable(functions, "requestDoorbell");
 
-const emailInput = document.getElementById("email");
-const passwordInput = document.getElementById("password");
-const sendVerificationButton = document.getElementById("sendVerification");
-const refreshVerificationButton = document.getElementById("refreshVerification");
-const ringButton = document.getElementById("ringButton");
-const availabilityEl = document.getElementById("availability");
-const statusEl = document.getElementById("status");
-const errorEl = document.getElementById("error");
-const homeIdEl = document.getElementById("homeId");
-const scheduleEl = document.getElementById("schedule");
-const doorbellStatusEl = document.getElementById("doorbellStatus");
-const emailModal = document.getElementById("emailModal");
-const closeModalButton = document.getElementById("closeModal");
-const downloadAppButton = document.getElementById("downloadApp");
+const elements = {
+  ringButton: document.getElementById("ringButton"),
+  availability: document.getElementById("availability"),
+  status: document.getElementById("status"),
+  error: document.getElementById("error"),
+  homeId: document.getElementById("homeId"),
+  schedule: document.getElementById("schedule"),
+  doorbellStatus: document.getElementById("doorbellStatus"),
+  scanQrButton: document.getElementById("scanQrButton"),
+  scanStatus: document.getElementById("scanStatus"),
+  scannerModal: document.getElementById("scannerModal"),
+  scannerVideo: document.getElementById("scannerVideo"),
+  scannerFeedback: document.getElementById("scannerFeedback"),
+  closeScannerModal: document.getElementById("closeScannerModal"),
+  stopScannerButton: document.getElementById("stopScannerButton"),
+  unsupportedBadge: document.getElementById("nativeScannerUnsupported"),
+  manualQrInput: document.getElementById("manualQrInput"),
+  applyManualQrButton: document.getElementById("applyManualQrButton"),
+  downloadApp: document.getElementById("downloadApp"),
+};
 
-const params = new URLSearchParams(window.location.search);
-const homeIdParam = params.get("homeId");
-const publicQrId = params.get("qr");
-let resolvedHomeId = homeIdParam;
-
-homeIdEl.textContent = resolvedHomeId ?? "No definido";
-if (publicQrId || homeIdParam) {
-  downloadAppButton?.classList.remove("hidden");
-}
-
-if (!homeIdParam && !publicQrId) {
-  ringButton.disabled = true;
-  statusEl.textContent = "El QR no tiene un identificador válido.";
-}
-
+const sessionId = getSessionId();
 let homeConfig = null;
 let pressCount = Number(localStorage.getItem("timbrPressCount") ?? "0");
-let isVerified = localStorage.getItem("timbrEmailVerified") === "true";
+let resolvedHomeId = null;
+let currentQrToken = null;
 let isWithinRange = false;
 let hasLocationCheck = false;
-const sessionId = getSessionId();
+let ringInFlight = false;
+
+const scannerState = {
+  stream: null,
+  rafId: null,
+  detector: null,
+  canvas: document.createElement("canvas"),
+  scanning: false,
+  decodeLock: false,
+  lastDecodedValue: null,
+  lastDecodedAt: 0,
+};
+
+bootstrap();
+
+async function bootstrap() {
+  registerServiceWorker();
+  bindEvents();
+  evaluateScannerSupport();
+  await applyInputAndRefresh(readQrInputFromUrl());
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", async () => {
+    try {
+      await navigator.serviceWorker.register("/sw.js");
+    } catch (error) {
+      console.warn("SW registration failed", error);
+    }
+  });
+}
+
+function bindEvents() {
+  elements.ringButton.addEventListener("click", ringDoorbell);
+  elements.scanQrButton.addEventListener("click", openScanner);
+  elements.closeScannerModal.addEventListener("click", closeScanner);
+  elements.stopScannerButton.addEventListener("click", closeScanner);
+  elements.scannerModal.addEventListener("click", (event) => {
+    if (event.target === elements.scannerModal) closeScanner();
+  });
+  elements.applyManualQrButton.addEventListener("click", () => {
+    applyInputAndRefresh(elements.manualQrInput.value.trim());
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopScannerStream();
+  });
+  window.addEventListener("pagehide", stopScannerStream);
+  window.addEventListener("beforeunload", stopScannerStream);
+}
+
+function evaluateScannerSupport() {
+  const hasCamera = !!navigator.mediaDevices?.getUserMedia;
+  const hasDetector = "BarcodeDetector" in window;
+  if (!hasCamera || !hasDetector) {
+    elements.unsupportedBadge.classList.remove("hidden");
+    elements.scanStatus.textContent =
+      "Escaneo nativo no disponible en este navegador.";
+  }
+}
+
+function readQrInputFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("homeId") || params.get("qr") || "";
+}
+
+async function applyInputAndRefresh(rawInput) {
+  clearMessages();
+  const parsed = parseQrInput(rawInput);
+  if (!parsed.isValid) {
+    updateNoQrState();
+    return;
+  }
+
+  resolvedHomeId = parsed.homeId ?? null;
+  currentQrToken = parsed.qr ?? null;
+  syncQueryParams();
+
+  elements.homeId.textContent = resolvedHomeId ?? "Resolviendo…";
+  elements.downloadApp.classList.remove("hidden");
+
+  await loadHomeConfig();
+  if (!homeConfig) {
+    elements.error.textContent = "No encontramos el hogar para ese QR.";
+  }
+}
+
+function parseQrInput(rawInput) {
+  const value = (rawInput ?? "").trim();
+  if (!value) {
+    return { isValid: false };
+  }
+
+  try {
+    const url = new URL(value, window.location.origin);
+    const homeIdFromUrl = url.searchParams.get("homeId");
+    const qrFromUrl = url.searchParams.get("qr");
+    if (homeIdFromUrl || qrFromUrl) {
+      return {
+        isValid: true,
+        homeId: homeIdFromUrl,
+        qr: qrFromUrl,
+        raw: value,
+      };
+    }
+    const normalizedPath = url.pathname.replace(/^\/+/, "");
+    if (normalizedPath && !normalizedPath.includes(".")) {
+      return { isValid: true, qr: normalizedPath, raw: value };
+    }
+  } catch {
+    // Non-URL values are treated as plain QR tokens.
+  }
+
+  if (/^[\w-]{4,128}$/.test(value)) {
+    return { isValid: true, qr: value, raw: value };
+  }
+
+  return { isValid: false };
+}
+
+function syncQueryParams() {
+  const url = new URL(window.location.href);
+  if (resolvedHomeId) {
+    url.searchParams.set("homeId", resolvedHomeId);
+    url.searchParams.delete("qr");
+  } else if (currentQrToken) {
+    url.searchParams.set("qr", currentQrToken);
+    url.searchParams.delete("homeId");
+  }
+  window.history.replaceState({}, "", url);
+}
 
 async function loadHomeConfig() {
   const homeId = await resolveHomeId();
-  if (!homeId) return;
+  if (!homeId) {
+    homeConfig = null;
+    updateAvailability();
+    return;
+  }
   try {
     const homeSnapshot = await getDoc(doc(db, "homes", homeId));
     homeConfig = homeSnapshot.exists() ? homeSnapshot.data() : null;
+    elements.homeId.textContent = homeId;
     updateAvailability();
   } catch (error) {
-    errorEl.textContent = error.message;
+    homeConfig = null;
+    elements.error.textContent = error.message ?? "Error cargando el hogar.";
+    updateAvailability();
   }
+}
+
+async function resolveHomeId() {
+  if (resolvedHomeId) return resolvedHomeId;
+  if (!currentQrToken) return null;
+
+  const homesQuery = query(
+    collection(db, "homes"),
+    where("publicQrId", "==", currentQrToken),
+    limit(1)
+  );
+  const snapshot = await getDocs(homesQuery);
+  const match = snapshot.docs[0];
+  resolvedHomeId = match?.id ?? null;
+  syncQueryParams();
+  return resolvedHomeId;
 }
 
 function updateAvailability() {
   if (!homeConfig) {
-    availabilityEl.textContent = "No encontramos el hogar. Revisá el QR.";
-    ringButton.disabled = true;
-    scheduleEl.textContent = "";
-    doorbellStatusEl.textContent = "";
+    elements.availability.textContent = "Escaneá un QR válido para continuar.";
+    elements.schedule.textContent = "";
+    elements.doorbellStatus.textContent = "";
+    elements.ringButton.disabled = true;
     return;
   }
+
   const enabled = isDoorbellAvailable(homeConfig);
-  scheduleEl.textContent = buildScheduleText(homeConfig);
-  doorbellStatusEl.textContent = `Estado: ${
-    enabled ? "Habilitado" : "No habilitado"
-  }`;
+  elements.schedule.textContent = buildScheduleText(homeConfig);
+  elements.doorbellStatus.textContent = `Estado: ${enabled ? "Habilitado" : "Fuera de horario"}`;
   if (!enabled) {
-    availabilityEl.textContent =
-      "El timbre está deshabilitado en este horario. Intentá nuevamente mañana.";
-    ringButton.disabled = true;
-  } else {
-    if (!isWithinRange) {
-      availabilityEl.textContent =
-        "Para tocar, confirmá tu ubicación a menos de 100 metros.";
-    } else if (pressCount > 0 && !isVerified) {
-      availabilityEl.textContent =
-        "Para tocar de nuevo, verificá tu email una única vez.";
-    } else {
-      availabilityEl.textContent = "Timbre habilitado.";
-    }
-    ringButton.disabled = false;
+    elements.availability.textContent = "El timbre está fuera de horario.";
+    elements.ringButton.disabled = true;
+    return;
   }
+
+  if (!isWithinRange) {
+    elements.availability.textContent = "Confirmá ubicación a menos de 100m.";
+  } else {
+    elements.availability.textContent = "Timbre habilitado.";
+  }
+  elements.ringButton.disabled = false;
 }
 
 function isDoorbellAvailable(config) {
   if (!config.isDoorbellEnabled) return false;
-  const timeZone = config.timeZone || "America/Argentina/Buenos_Aires";
-  const now = new Date();
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
+  const zone = config.timeZone || "America/Argentina/Buenos_Aires";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: zone,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  });
-  const parts = formatter.formatToParts(now);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  }).formatToParts(new Date());
+
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
   const currentMinutes = hour * 60 + minute;
+
   const startMinutes = Number(config.scheduleStartMinutes ?? 480);
   const endMinutes = Number(config.scheduleEndMinutes ?? 1200);
-
   if (startMinutes <= endMinutes) {
     return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
   }
@@ -137,11 +272,9 @@ function isDoorbellAvailable(config) {
 }
 
 function buildScheduleText(config) {
-  const startMinutes = Number(config.scheduleStartMinutes ?? 480);
-  const endMinutes = Number(config.scheduleEndMinutes ?? 1200);
-  const startLabel = minutesToTime(startMinutes);
-  const endLabel = minutesToTime(endMinutes);
-  return `Horario habilitado: ${startLabel} a ${endLabel}`;
+  const from = minutesToTime(Number(config.scheduleStartMinutes ?? 480));
+  const to = minutesToTime(Number(config.scheduleEndMinutes ?? 1200));
+  return `Horario habilitado: ${from} a ${to}`;
 }
 
 function minutesToTime(totalMinutes) {
@@ -150,139 +283,54 @@ function minutesToTime(totalMinutes) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function openEmailModal() {
-  emailModal.classList.remove("hidden");
-  emailModal.setAttribute("aria-hidden", "false");
-}
-
-function closeEmailModal() {
-  emailModal.classList.add("hidden");
-  emailModal.setAttribute("aria-hidden", "true");
-}
-
-async function sendVerification() {
-  statusEl.textContent = "";
-  errorEl.textContent = "";
-  const email = emailInput.value.trim();
-  const password = passwordInput.value;
-  if (!email || !password) {
-    errorEl.textContent = "Ingresá email y contraseña.";
-    return;
-  }
-
-  try {
-    let userCredential;
-    try {
-      userCredential = await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      if (error.code === "auth/user-not-found") {
-        userCredential = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-      } else {
-        throw error;
-      }
-    }
-    if (!userCredential.user.emailVerified) {
-      await sendEmailVerification(userCredential.user);
-      statusEl.textContent =
-        "Te enviamos un email de verificación. Revisá tu inbox.";
-    } else {
-      statusEl.textContent = "Email verificado. Ya podés tocar timbre.";
-      isVerified = true;
-      localStorage.setItem("timbrEmailVerified", "true");
-      closeEmailModal();
-      updateAvailability();
-    }
-    updateAvailability();
-  } catch (error) {
-    errorEl.textContent = error.message;
-  }
-}
-
-async function refreshVerification() {
-  statusEl.textContent = "";
-  errorEl.textContent = "";
-  const user = auth.currentUser;
-  if (!user) {
-    errorEl.textContent = "Primero ingresá con tu email.";
-    return;
-  }
-
-  try {
-    await user.reload();
-    if (user.emailVerified) {
-      statusEl.textContent = "Email verificado. Ya podés tocar timbre.";
-      isVerified = true;
-      localStorage.setItem("timbrEmailVerified", "true");
-      closeEmailModal();
-      updateAvailability();
-    } else {
-      errorEl.textContent =
-        "Todavía no vemos la verificación. Revisá tu email.";
-    }
-  } catch (error) {
-    errorEl.textContent = error.message ?? "No se pudo verificar el email.";
-  }
-}
-
 async function ringDoorbell() {
-  statusEl.textContent = "";
-  errorEl.textContent = "";
-  const homeId = await resolveHomeId();
-  if (!homeId) {
-    errorEl.textContent = "No se encontró el hogar en el QR.";
-    return;
-  }
-  if (!homeConfig || !isDoorbellAvailable(homeConfig)) {
-    availabilityEl.textContent =
-      "El timbre está deshabilitado en este horario. Intentá nuevamente mañana.";
-    ringButton.disabled = true;
-    return;
-  }
-  const isAuthorized = await ensureLocationWithinRange();
-  if (!isAuthorized) {
-    return;
-  }
-  if (pressCount > 0 && !isVerified) {
-    errorEl.textContent = "";
-    openEmailModal();
-    return;
-  }
+  clearMessages();
+  if (ringInFlight) return;
+  ringInFlight = true;
 
   try {
-    const verifiedEmail = isVerified ? auth.currentUser?.email ?? null : null;
+    const homeId = await resolveHomeId();
+    if (!homeId || !homeConfig) {
+      elements.error.textContent = "No hay un hogar válido para tocar timbre.";
+      return;
+    }
+
+    if (!isDoorbellAvailable(homeConfig)) {
+      updateAvailability();
+      return;
+    }
+
+    const isAuthorized = await ensureLocationWithinRange();
+    if (!isAuthorized) return;
+
     const result = await requestDoorbell({
       homeId,
-      phone: verifiedEmail,
+      phone: null,
       sessionId,
     });
-    statusEl.textContent = result.data?.message ?? "¡Timbre enviado!";
+
     pressCount += 1;
     localStorage.setItem("timbrPressCount", String(pressCount));
-    updateAvailability();
+    elements.status.textContent = result.data?.message ?? "¡Timbre enviado!";
   } catch (error) {
-    errorEl.textContent = error.message ?? "No se pudo enviar el timbre.";
+    elements.error.textContent = error.message ?? "No se pudo enviar el timbre.";
+  } finally {
+    ringInFlight = false;
   }
 }
 
 async function ensureLocationWithinRange() {
-  if (hasLocationCheck && isWithinRange) {
-    return true;
-  }
+  if (hasLocationCheck && isWithinRange) return true;
   if (!homeConfig?.latitude || !homeConfig?.longitude) {
-    errorEl.textContent =
-      "No tenemos ubicación exacta del hogar para validar distancia.";
+    elements.error.textContent = "No hay coordenadas del hogar para validar distancia.";
     return false;
   }
   if (!navigator.geolocation) {
-    errorEl.textContent =
-      "Tu navegador no permite validar la ubicación. Usá otro dispositivo.";
+    elements.error.textContent = "Este navegador no soporta geolocalización.";
     return false;
   }
-  statusEl.textContent = "Validando ubicación…";
+
+  elements.status.textContent = "Validando ubicación…";
   try {
     const position = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -291,31 +339,29 @@ async function ensureLocationWithinRange() {
         maximumAge: 0,
       });
     });
+
     const distance = calculateDistanceMeters(
       position.coords.latitude,
       position.coords.longitude,
       Number(homeConfig.latitude),
       Number(homeConfig.longitude)
     );
+
     hasLocationCheck = true;
-    if (distance <= 100) {
-      isWithinRange = true;
-      statusEl.textContent = "Ubicación confirmada. Podés tocar el timbre.";
+    isWithinRange = distance <= 100;
+    if (!isWithinRange) {
+      elements.error.textContent = `Estás a ${Math.round(distance)}m. Acercate a menos de 100m.`;
       updateAvailability();
-      return true;
+      return false;
     }
-    isWithinRange = false;
-    errorEl.textContent = `Estás a ${Math.round(
-      distance
-    )}m. Acercate a menos de 100m para tocar.`;
+
     updateAvailability();
-    return false;
+    return true;
   } catch (error) {
-    errorEl.textContent =
-      error.message ?? "No pudimos validar tu ubicación.";
+    elements.error.textContent = error.message ?? "No se pudo validar la ubicación.";
     return false;
   } finally {
-    statusEl.textContent = "";
+    elements.status.textContent = "";
   }
 }
 
@@ -325,48 +371,119 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadius * c;
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return earthRadius * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-async function resolveHomeId() {
-  if (resolvedHomeId) return resolvedHomeId;
-  if (!publicQrId) return null;
+async function openScanner() {
+  clearMessages();
+  if (!navigator.mediaDevices?.getUserMedia || !("BarcodeDetector" in window)) {
+    elements.unsupportedBadge.classList.remove("hidden");
+    elements.scannerFeedback.textContent =
+      "Tu navegador no soporta escaneo QR nativo. Pegá el código manualmente.";
+    return;
+  }
+
   try {
-    const homesQuery = query(
-      collection(db, "homes"),
-      where("publicQrId", "==", publicQrId),
-      limit(1)
-    );
-    const snapshot = await getDocs(homesQuery);
-    const match = snapshot.docs[0];
-    resolvedHomeId = match?.id ?? null;
-    homeIdEl.textContent = resolvedHomeId ?? "No definido";
-    if (!resolvedHomeId) {
-      ringButton.disabled = true;
-      statusEl.textContent = "No encontramos el hogar para este QR.";
-    }
-    return resolvedHomeId;
+    elements.scannerModal.classList.remove("hidden");
+    elements.scannerModal.setAttribute("aria-hidden", "false");
+    elements.scannerFeedback.textContent = "Solicitando cámara…";
+
+    scannerState.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+    elements.scannerVideo.srcObject = scannerState.stream;
+    await elements.scannerVideo.play();
+
+    scannerState.detector = new BarcodeDetector({ formats: ["qr_code"] });
+    scannerState.scanning = true;
+    elements.scannerFeedback.textContent = "Apuntá al QR para escanear.";
+    scanFrame();
   } catch (error) {
-    errorEl.textContent = error.message ?? "No se pudo validar el QR.";
-    return null;
+    elements.scannerFeedback.textContent =
+      error.message ?? "No se pudo iniciar la cámara.";
+    stopScannerStream();
   }
 }
 
-sendVerificationButton.addEventListener("click", sendVerification);
-refreshVerificationButton.addEventListener("click", refreshVerification);
-ringButton.addEventListener("click", ringDoorbell);
-closeModalButton.addEventListener("click", closeEmailModal);
-emailModal.addEventListener("click", (event) => {
-  if (event.target === emailModal) closeEmailModal();
-});
+function closeScanner() {
+  stopScannerStream();
+  elements.scannerModal.classList.add("hidden");
+  elements.scannerModal.setAttribute("aria-hidden", "true");
+}
 
-loadHomeConfig();
+function stopScannerStream() {
+  scannerState.scanning = false;
+  scannerState.decodeLock = false;
+  if (scannerState.rafId) {
+    cancelAnimationFrame(scannerState.rafId);
+    scannerState.rafId = null;
+  }
+  if (scannerState.stream) {
+    scannerState.stream.getTracks().forEach((track) => track.stop());
+    scannerState.stream = null;
+  }
+  if (elements.scannerVideo.srcObject) {
+    elements.scannerVideo.srcObject = null;
+  }
+}
+
+async function scanFrame() {
+  if (!scannerState.scanning || scannerState.decodeLock) {
+    scannerState.rafId = requestAnimationFrame(scanFrame);
+    return;
+  }
+
+  const video = elements.scannerVideo;
+  if (!video.videoWidth || !video.videoHeight) {
+    scannerState.rafId = requestAnimationFrame(scanFrame);
+    return;
+  }
+
+  scannerState.decodeLock = true;
+  try {
+    const canvas = scannerState.canvas;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const barcodes = await scannerState.detector.detect(canvas);
+    const value = barcodes[0]?.rawValue?.trim();
+    if (value) {
+      const now = Date.now();
+      const isDuplicate =
+        value === scannerState.lastDecodedValue &&
+        now - scannerState.lastDecodedAt < 1500;
+      if (!isDuplicate) {
+        scannerState.lastDecodedValue = value;
+        scannerState.lastDecodedAt = now;
+        elements.scannerFeedback.textContent = "QR detectado. Validando…";
+        await applyInputAndRefresh(value);
+        closeScanner();
+        return;
+      }
+    }
+  } catch (error) {
+    elements.scannerFeedback.textContent = error.message ?? "Error escaneando QR.";
+  } finally {
+    scannerState.decodeLock = false;
+  }
+
+  scannerState.rafId = requestAnimationFrame(scanFrame);
+}
+
+function updateNoQrState() {
+  elements.homeId.textContent = "No definido";
+  elements.availability.textContent = "Escaneá un QR válido para continuar.";
+  elements.ringButton.disabled = true;
+}
+
+function clearMessages() {
+  elements.error.textContent = "";
+  elements.status.textContent = "";
+}
 
 function getSessionId() {
   const existing = localStorage.getItem("timbrSessionId");
